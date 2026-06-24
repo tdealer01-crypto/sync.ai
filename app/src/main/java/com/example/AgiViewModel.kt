@@ -21,6 +21,7 @@ import retrofit2.http.Headers
 import retrofit2.http.Header
 import retrofit2.http.Url
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.squareup.moshi.JsonClass
@@ -69,6 +70,18 @@ interface SupabaseApiService {
     )
 }
 
+// --- DSG Backend API ---
+@JsonClass(generateAdapter = true)
+data class DsgExecuteRequest(val prompt: String, val mode: String = "multi-agent")
+
+interface DsgApiService {
+    @Headers("Content-Type: application/json")
+    @POST("api/multi-agent/execute")
+    suspend fun executeMultiAgent(
+        @Body request: DsgExecuteRequest
+    ): ResponseBody
+}
+
 interface GeminiApiService {
     @Headers("Content-Type: application/json")
     @POST("v1beta/models/gemini-3.5-flash:generateContent")
@@ -102,6 +115,25 @@ object RetrofitClient {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(SupabaseApiService::class.java)
+    }
+
+    val dsgService: DsgApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://tdealer01-crypto-dsg-control-plane.vercel.app/")
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(DsgApiService::class.java)
+    }
+}
+
+suspend fun executeDsgBackend(prompt: String): String = withContext(Dispatchers.IO) {
+    try {
+        val request = DsgExecuteRequest(prompt = prompt)
+        val response = RetrofitClient.dsgService.executeMultiAgent(request)
+        response.string()
+    } catch (e: Exception) {
+        "API Error: ${e.message}"
     }
 }
 
@@ -173,6 +205,7 @@ data class AgiState(
     val pipelineStage: PipelineStage = PipelineStage.IDLE,
     val currentTask: String = "",
     val logs: List<String> = emptyList(),
+    val terminalLogs: List<String> = listOf("AGI Terminal Sandbox v1.0", "Type a command to execute..."),
     val taskStore: Map<Int, WorkerState> = emptyMap(),
     val activeBlock: String = "",
     val latency: Int = 0,
@@ -183,6 +216,35 @@ data class AgiState(
 class AgiViewModel : ViewModel() {
     private val _state = MutableStateFlow(AgiState())
     val state: StateFlow<AgiState> = _state.asStateFlow()
+
+    fun executeTerminalCommand(cmd: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(terminalLogs = it.terminalLogs + "> $cmd") }
+            if (cmd.trim().isEmpty()) return@launch
+            
+            _state.update { it.copy(terminalLogs = it.terminalLogs + "Executing via Sandboxed AGI tool...") }
+            delay(800)
+            
+            val response = try {
+                if (cmd.startsWith("echo ")) {
+                    cmd.removePrefix("echo ")
+                } else if (cmd == "help") {
+                    "Available commands: echo, help, status, ping, sandbox-test, virtualization --clone-app"
+                } else if (cmd == "sandbox-test") {
+                    "Sandbox isolation active. No external mutations allowed."
+                } else if (cmd.startsWith("virtualization --clone-app")) {
+                    val appPackage = cmd.removePrefix("virtualization --clone-app").trim()
+                    "Initializing Virtual Container for [$appPackage]...\nAllocating isolated memory space...\nMounting parallel filesystem...\nClone created successfully: dual_$appPackage"
+                } else {
+                    "Command not found: $cmd"
+                }
+            } catch (e: Exception) {
+                "Error: ${e.message}"
+            }
+            
+            _state.update { it.copy(terminalLogs = it.terminalLogs + response) }
+        }
+    }
 
     fun updateTask(task: String) {
         if (_state.value.pipelineStage == PipelineStage.IDLE || _state.value.pipelineStage == PipelineStage.FINISHED || _state.value.pipelineStage == PipelineStage.BLOCKED) {
@@ -289,7 +351,7 @@ class AgiViewModel : ViewModel() {
                             }
                         }
                         
-                        val rawResult = generateContent(promptForWorker)
+                        val rawResult = executeDsgBackend(promptForWorker)
                         progressJob.cancel()
                         
                         if (rawResult.startsWith("API Error") || rawResult.contains("API Key not configured")) {

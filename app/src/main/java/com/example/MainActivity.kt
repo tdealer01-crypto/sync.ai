@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -35,16 +36,27 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = ArchBackground
-                ) { innerPadding ->
-                    AgiDashboard(
-                        viewModel = viewModel,
-                        modifier = Modifier
-                            .padding(innerPadding)
-                            .fillMaxSize()
+                Box(modifier = Modifier.fillMaxSize()) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = R.drawable.lisa_background_1782272440866),
+                        contentDescription = "Background",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
+                    // Dimmer to make text readable
+                    Box(modifier = Modifier.fillMaxSize().background(Color(0x331A0000)))
+                    
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        containerColor = Color.Transparent
+                    ) { innerPadding ->
+                        AgiDashboard(
+                            viewModel = viewModel,
+                            modifier = Modifier
+                                .padding(innerPadding)
+                                .fillMaxSize()
+                        )
+                    }
                 }
             }
         }
@@ -324,6 +336,108 @@ fun AgiDashboard(viewModel: AgiViewModel, modifier: Modifier = Modifier) {
                     InfraNode("Auto Scaling", Icons.Default.TrendingUp)
                     InfraNode("Service Mesh", Icons.Default.NetworkCheck)
                     InfraNode("CI/CD GitOps", Icons.Default.AllInclusive)
+                }
+            }
+        }
+
+        // --- TERMINAL SANDBOX ---
+        item {
+            var terminalInput by remember { mutableStateOf("") }
+            val listState = rememberLazyListState()
+            
+            LaunchedEffect(state.terminalLogs.size) {
+                if (state.terminalLogs.isNotEmpty()) {
+                    listState.animateScrollToItem(state.terminalLogs.size - 1)
+                }
+            }
+
+            ArchBlock("SANDBOX TERMINAL", Icons.Default.Terminal, ArchPurple) {
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ArchBackground)
+                            .border(1.dp, ArchBorder, RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
+                            items(state.terminalLogs) { log ->
+                                Text(
+                                    text = log,
+                                    color = if (log.startsWith(">")) ArchYellow else ArchEmerald,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = terminalInput,
+                        onValueChange = { terminalInput = it },
+                        placeholder = { Text("sandbox$ ", color = ArchTextMuted) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ArchPurple,
+                            unfocusedBorderColor = ArchBorder,
+                            focusedTextColor = ArchTextMain,
+                            unfocusedTextColor = ArchTextMain,
+                            cursorColor = ArchPurple
+                        ),
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onSend = {
+                                viewModel.executeTerminalCommand(terminalInput)
+                                terminalInput = ""
+                            }
+                        ),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                viewModel.executeTerminalCommand(terminalInput)
+                                terminalInput = ""
+                            }) {
+                                Icon(Icons.Default.Send, contentDescription = "Send Command", tint = ArchPurple)
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+        }
+
+        // --- VIRTUALIZATION & APP CLONER ---
+        item {
+            ArchBlock("APP CLONER ENGINE", Icons.Default.Smartphone, ArchBlue) {
+                Column {
+                    Text(
+                        "Hardware Virtualization Sandbox",
+                        color = ArchTextSecondary,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ActionIcon(Icons.Default.ChatBubble, "LINE (Clone)")
+                        ActionIcon(Icons.Default.Share, "Social (Clone)")
+                        ActionIcon(Icons.Default.VideogameAsset, "Games (Sandbox)")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { viewModel.executeTerminalCommand("virtualization --clone-app com.linecorp.b612") },
+                        colors = ButtonDefaults.buttonColors(containerColor = ArchBlue),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Create New App Clone", fontFamily = FontFamily.Monospace)
+                    }
                 }
             }
         }
