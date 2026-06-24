@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.*
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -36,6 +37,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
+                var currentScreen by remember { mutableStateOf("login") }
+
                 Box(modifier = Modifier.fillMaxSize()) {
                     androidx.compose.foundation.Image(
                         painter = androidx.compose.ui.res.painterResource(id = R.drawable.lisa_background_1782272440866),
@@ -44,18 +47,29 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
                     // Dimmer to make text readable
-                    Box(modifier = Modifier.fillMaxSize().background(Color(0x331A0000)))
+                    Box(modifier = Modifier.fillMaxSize().background(Color(0x661A0000)))
                     
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
                         containerColor = Color.Transparent
                     ) { innerPadding ->
-                        AgiDashboard(
-                            viewModel = viewModel,
-                            modifier = Modifier
-                                .padding(innerPadding)
-                                .fillMaxSize()
-                        )
+                        Crossfade(targetState = currentScreen, label = "screen_transition") { screen ->
+                            when (screen) {
+                                "login" -> {
+                                    Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                                        LoginScreen(onLoginSuccess = { currentScreen = "dashboard" })
+                                    }
+                                }
+                                "dashboard" -> {
+                                    AgiDashboard(
+                                        viewModel = viewModel,
+                                        modifier = Modifier
+                                            .padding(innerPadding)
+                                            .fillMaxSize()
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -330,12 +344,25 @@ fun AgiDashboard(viewModel: AgiViewModel, modifier: Modifier = Modifier) {
 
         // --- INFRASTRUCTURE LAYER ---
         item {
-            ArchBlock("INFRASTRUCTURE LAYER (KUBERNETES NATIVE)", Icons.Default.Cloud, ArchBlue) {
-                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    InfraNode("K8s Cluster", Icons.Default.ViewQuilt)
-                    InfraNode("Auto Scaling", Icons.Default.TrendingUp)
-                    InfraNode("Service Mesh", Icons.Default.NetworkCheck)
-                    InfraNode("CI/CD GitOps", Icons.Default.AllInclusive)
+            ArchBlock("INFRASTRUCTURE LAYER (Vercel Prod: Ready)", Icons.Default.Cloud, ArchEmerald) {
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        InfraNode("Next.js Edge", Icons.Default.ViewQuilt)
+                        InfraNode("Prod Ready", Icons.Default.CheckCircle)
+                        InfraNode("Supabase DB", Icons.Default.Storage)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Vercel Health: ${state.backendHealth}",
+                        color = ArchEmerald,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(ArchSurfaceHighlight.copy(alpha = 0.5f))
+                            .border(1.dp, ArchBorder, RoundedCornerShape(4.dp))
+                            .padding(8.dp)
+                    )
                 }
             }
         }

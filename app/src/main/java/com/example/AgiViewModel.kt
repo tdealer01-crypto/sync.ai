@@ -16,6 +16,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
+import retrofit2.http.GET
 import retrofit2.http.Query
 import retrofit2.http.Headers
 import retrofit2.http.Header
@@ -80,6 +81,15 @@ interface DsgApiService {
     suspend fun executeMultiAgent(
         @Body request: DsgExecuteRequest
     ): ResponseBody
+
+    @Headers("Content-Type: application/json")
+    @POST("api/spine/execute")
+    suspend fun executeSpine(
+        @Body request: Map<String, String>
+    ): ResponseBody
+    
+    @GET("api/health")
+    suspend fun getHealth(): ResponseBody
 }
 
 interface GeminiApiService {
@@ -205,17 +215,29 @@ data class AgiState(
     val pipelineStage: PipelineStage = PipelineStage.IDLE,
     val currentTask: String = "",
     val logs: List<String> = emptyList(),
-    val terminalLogs: List<String> = listOf("AGI Terminal Sandbox v1.0", "Type a command to execute..."),
+    val terminalLogs: List<String> = listOf("AGI Terminal Sandbox v1.0", "Connected to Vercel Prod: https://tdealer01-crypto-dsg-control-plane.vercel.app", "Type 'backend health' to ping DSG backend..."),
     val taskStore: Map<Int, WorkerState> = emptyMap(),
     val activeBlock: String = "",
     val latency: Int = 0,
     val qualityScore: Float = 0f,
-    val finalResult: String? = null
+    val finalResult: String? = null,
+    val backendHealth: String = "Unknown"
 )
 
 class AgiViewModel : ViewModel() {
     private val _state = MutableStateFlow(AgiState())
     val state: StateFlow<AgiState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            try {
+                val res = RetrofitClient.dsgService.getHealth()
+                _state.update { it.copy(backendHealth = res.string().take(100)) }
+            } catch (e: Exception) {
+                _state.update { it.copy(backendHealth = "Error: ${e.message}") }
+            }
+        }
+    }
 
     fun executeTerminalCommand(cmd: String) {
         viewModelScope.launch {
@@ -229,12 +251,22 @@ class AgiViewModel : ViewModel() {
                 if (cmd.startsWith("echo ")) {
                     cmd.removePrefix("echo ")
                 } else if (cmd == "help") {
-                    "Available commands: echo, help, status, ping, sandbox-test, virtualization --clone-app"
+                    "Available commands: echo, help, status, ping, sandbox-test, virtualization --clone-app, backend <cmd>"
                 } else if (cmd == "sandbox-test") {
                     "Sandbox isolation active. No external mutations allowed."
                 } else if (cmd.startsWith("virtualization --clone-app")) {
                     val appPackage = cmd.removePrefix("virtualization --clone-app").trim()
                     "Initializing Virtual Container for [$appPackage]...\nAllocating isolated memory space...\nMounting parallel filesystem...\nClone created successfully: dual_$appPackage"
+                } else if (cmd.startsWith("backend ")) {
+                    val actualCmd = cmd.removePrefix("backend ").trim()
+                    if (actualCmd == "health") {
+                        val apiRes = RetrofitClient.dsgService.getHealth()
+                        apiRes.string()
+                    } else {
+                        val req = mapOf("command" to actualCmd)
+                        val apiRes = RetrofitClient.dsgService.executeSpine(req)
+                        apiRes.string()
+                    }
                 } else {
                     "Command not found: $cmd"
                 }
